@@ -17,8 +17,9 @@ def generate_answer(query: str, context: list[dict]) -> str:
     """
     if not context:
         return (
-            "I could not find an answer to your question in the available documents. "
-            "Please try rephrasing your search terms or asking about password security, HR policies, or product FAQs."
+            "I could not find an answer to your question in the available local documents. "
+            "Please try rephrasing your search terms or asking about password requirements, "
+            "annual leave policies, or API rate limits."
         )
 
     # Extract distinct document sources referenced in context
@@ -35,10 +36,9 @@ def generate_answer(query: str, context: list[dict]) -> str:
     snippets_text = "\n\n".join(snippets)
 
     response = (
-        f"**Answer (Local Rule-Based Prototype - Day 2)**:\n\n"
+        f"**Answer (Local Rule-Based Prototype)**:\n\n"
         f"Based on the retrieved context from **{source_list_str}**, here is the relevant information matching your query:\n\n"
-        f"{snippets_text}\n\n"
-        f"*(Note: This response is generated locally by matching keyword context chunks without external LLM API calls.)*"
+        f"{snippets_text}"
     )
 
     return response

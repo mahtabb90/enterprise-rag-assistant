@@ -5,8 +5,16 @@ Run locally with:
     streamlit run app/main.py
 """
 
+import sys
+from pathlib import Path
+
+# Add project root directory to sys.path to ensure 'app' package imports work cleanly
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 import streamlit as st
-import config
+from app import config
 from app.rag import ingest_documents, chunk_documents, retrieve_context, generate_answer
 
 
