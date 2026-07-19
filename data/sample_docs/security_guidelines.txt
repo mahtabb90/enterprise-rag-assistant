@@ -1,0 +1,13 @@
+Security Guidelines and Best Practices
+
+1. Password Security
+All user accounts must use strong passwords at least 12 characters in length, containing a combination of uppercase letters, lowercase letters, numbers, and special symbols. Passwords must not be reused across multiple systems.
+
+2. Multi-Factor Authentication (MFA)
+Multi-factor authentication (MFA) is mandatory for accessing enterprise applications, internal portals, and remote VPN services. Users must approve login requests using an authenticated authenticator app or hardware token.
+
+3. Clean Desk and Workstation Protection
+Employees must lock their workstations whenever leaving their desks. Sensitive documents must be stored in secure lockable drawers when unattended.
+
+4. Security Incident Reporting
+Any suspicious activity, phishing emails, or potential security breaches must be reported immediately to the IT Security Helpdesk or submitted via the internal security portal.

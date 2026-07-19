@@ -1,0 +1,13 @@
+Enterprise Product FAQ and Technical Specs
+
+1. Cloud Backup Schedules
+Automated system backups run every 6 hours with differential snapshots stored across multiple geographic availability zones. Point-in-time recovery is supported up to 30 days.
+
+2. API Rate Limits and Quotas
+The REST API allows up to 1,000 requests per minute per authenticated API key. Rate limit status headers are returned with every HTTP response. Exceeding quotas results in HTTP status code 429.
+
+3. Role-Based Access Control (RBAC)
+User permissions are managed through fine-grained roles including Admin, Editor, Viewer, and Auditor. Roles can be mapped directly to enterprise Identity Providers (IdP) via SAML or Single Sign-On (SSO).
+
+4. Data Export and Portability
+Administrators can initiate full tenant data exports in JSON or CSV format directly from the administration dashboard at any time.

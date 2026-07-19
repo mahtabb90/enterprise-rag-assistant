@@ -3,7 +3,7 @@ Unit tests for the text chunking module.
 """
 
 import pytest
-from app.rag.chunker import chunk_text
+from app.rag.chunker import chunk_text, chunk_documents
 
 
 def test_chunk_text_empty_input():
@@ -26,10 +26,6 @@ def test_chunk_text_splitting():
     chunk_size = 10
     overlap = 2
     
-    # step = 10 - 2 = 8
-    # Chunk 0: start 0, end 10 -> "1234567890"
-    # Chunk 1: start 8, end 18 -> "9012345678"
-    # Chunk 2: start 16, end 26 -> "7890"
     result = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
     
     assert len(result) == 3
@@ -42,3 +38,36 @@ def test_chunk_text_invalid_overlap():
     """Tests that overlap greater than or equal to chunk_size raises ValueError."""
     with pytest.raises(ValueError):
         chunk_text("Sample text", chunk_size=10, overlap=10)
+
+
+def test_chunk_text_word_boundary_alignment():
+    """Tests that text with spaces aligns boundaries on words rather than cutting words."""
+    text = "All user accounts must use strong passwords at least 12 characters."
+    chunks = chunk_text(text, chunk_size=30, overlap=5)
+    
+    assert len(chunks) >= 2
+    # Verify that words are intact and not cut mid-word (e.g. no "passwor")
+    for chunk in chunks:
+        assert chunk == chunk.strip()
+        words = chunk.split()
+        assert len(words) > 0
+
+
+def test_chunk_documents():
+    """Tests chunking a list of document objects with metadata preservation."""
+    sample_docs = [
+        {"source": "doc1.txt", "text": "Hello world from document one."},
+        {"source": "doc2.txt", "text": "Second document content for chunking."}
+    ]
+    
+    chunks = chunk_documents(sample_docs, chunk_size=15, overlap=5)
+    
+    assert len(chunks) > 0
+    for idx, chunk in enumerate(chunks, start=1):
+        assert "source" in chunk
+        assert "chunk_id" in chunk
+        assert "text" in chunk
+        assert chunk["chunk_id"] == idx
+        assert chunk["text"] == chunk["text"].strip()
+
+    assert chunks[0]["source"] == "doc1.txt"

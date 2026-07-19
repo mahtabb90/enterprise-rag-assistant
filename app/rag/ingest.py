@@ -1,20 +1,43 @@
 """
-Document Ingestion Module (Placeholder).
+Document Ingestion Module.
 
-Will handle reading, parsing, and preprocessing enterprise documents 
-(PDFs, Markdown, TXT) in future iterations.
+Loads text and markdown documents from a specified local directory.
 """
 
+from pathlib import Path
 
-def ingest_documents(source_path: str) -> list[str]:
-    """Placeholder function for loading enterprise documents.
+
+def ingest_documents(source_path: str = "data/sample_docs") -> list[dict]:
+    """Scans a local directory and loads .txt and .md files into a list of document objects.
 
     Args:
-        source_path (str): Path or URI to document sources.
+        source_path (str): Relative or absolute path to the document directory.
 
     Returns:
-        list[str]: Raw text extracted from source documents.
+        list[dict]: A list of dictionaries containing:
+            - "source": The filename of the document (e.g., "security_guidelines.txt")
+            - "text": The full string content of the file
     """
-    # Placeholder implementation for Day 1 foundation
-    print(f"[Ingest Placeholder] Scanning documents from: {source_path}")
-    return []
+    directory = Path(source_path)
+
+    # Return an empty list if the specified directory does not exist
+    if not directory.exists() or not directory.is_dir():
+        print(f"[Warning] Ingestion path '{source_path}' does not exist or is not a directory.")
+        return []
+
+    documents = []
+
+    # Iterate through all files in the directory
+    for file_path in sorted(directory.iterdir()):
+        # Only process .txt and .md files
+        if file_path.is_file() and file_path.suffix.lower() in [".txt", ".md"]:
+            try:
+                content = file_path.read_text(encoding="utf-8")
+                documents.append({
+                    "source": file_path.name,
+                    "text": content
+                })
+            except Exception as e:
+                print(f"[Error] Failed to read '{file_path.name}': {e}")
+
+    return documents

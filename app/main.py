@@ -5,12 +5,21 @@ Run locally with:
     streamlit run app/main.py
 """
 
+import sys
+from pathlib import Path
+
+# Add project root directory to sys.path to ensure 'app' package imports work cleanly
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 import streamlit as st
-import config
+from app import config
+from app.rag import ingest_documents, chunk_documents, retrieve_context, generate_answer
 
 
 def setup_page_configuration() -> None:
-    """Configures the Streamlit browser window title and page layout."""
+    """Configures page title, icon, and layout."""
     st.set_page_config(
         page_title=config.APP_TITLE,
         page_icon="🤖",
@@ -18,15 +27,33 @@ def setup_page_configuration() -> None:
     )
 
 
-def render_sidebar() -> None:
-    """Renders project status and overview information in the sidebar."""
-    st.sidebar.title("📊 Project Status")
+@st.cache_data
+def load_and_process_documents() -> tuple[list[dict], list[dict]]:
+    """Loads sample documents from disk and splits them into text chunks.
+
+    Returns:
+        tuple[list[dict], list[dict]]: (raw_documents, chunks)
+    """
+    documents = ingest_documents("data/sample_docs")
+    chunks = chunk_documents(documents, chunk_size=config.DEFAULT_CHUNK_SIZE, overlap=config.DEFAULT_CHUNK_OVERLAP)
+    return documents, chunks
+
+
+def render_sidebar(doc_count: int, chunk_count: int) -> None:
+    """Renders project status, document metrics, and pipeline stage in sidebar."""
+    st.sidebar.title("📊 Pipeline Status")
+    
+    st.sidebar.metric(label="📄 Local Documents Loaded", value=doc_count)
+    st.sidebar.metric(label="🧩 Chunks Generated", value=chunk_count)
+    
+    st.sidebar.divider()
     
     st.sidebar.info(
-        "**Phase 1: Local Foundation**\n\n"
-        "• Core architecture & module structure established\n"
-        "• Local text chunker implementation\n"
-        "• Unit test suite configured"
+        "**Current Pipeline Stage:**\n\n"
+        "⚡ **Local RAG Prototype (Day 2)**\n\n"
+        "• Local text ingestion & window chunking\n"
+        "• Normalized keyword similarity search\n"
+        "• Grounded local answer synthesis"
     )
     
     st.sidebar.subheader("Planned Learning Stack")
@@ -39,58 +66,57 @@ def render_sidebar() -> None:
         - **Registry & DevOps:** Artifact Registry, GitHub Actions, Terraform
         """
     )
-    
-    st.sidebar.caption("Status: Day 1 Skeleton Ready")
 
 
-def render_main_content() -> None:
-    """Renders the main page title, explanation, and interactive Q&A interface."""
+def render_main_content(chunks: list[dict]) -> None:
+    """Renders main interface, chat interaction, and retrieved context expander."""
     st.title(config.APP_TITLE)
     
     st.markdown(
         """
         Welcome to the **Enterprise RAG Assistant**.
         
-        ### What this app will become
-        This application is being built step-by-step as a demonstration of a 
-        **production-grade Retrieval-Augmented Generation (RAG) system**.
-        
-        Future capabilities will include:
-        1. **Document Ingestion**: Parsing structured and unstructured enterprise documents.
-        2. **Smart Chunking**: Splitting text into semantic segments for embedding indexing.
-        3. **Vector Retrieval**: Searching relevant context from a high-performance vector store.
-        4. **Grounded Generation**: Synthesizing accurate answers using advanced LLMs with source citations.
+        This local prototype demonstrates document ingestion, chunking, keyword retrieval, 
+        and grounded answer generation using sample enterprise documents (security guidelines, 
+        HR policies, and product FAQs).
         """
     )
     
     st.divider()
     
-    st.subheader("💬 Ask the Assistant")
-    st.caption("Enter a question below to test the interface interaction.")
+    st.subheader("💬 Ask a Question")
+    st.caption("Try asking: *'What are the password requirements?'*, *'How many days of annual leave do I get?'*, or *'What are the API rate limits?'*")
     
-    # User query input field
-    user_query = st.chat_input("Ask a question about your enterprise documents...")
+    # Chat input field
+    user_query = st.chat_input("Ask a question about local sample documents...")
     
     if user_query:
-        # Display the user's prompt
+        # Display user query
         with st.chat_message("user"):
             st.write(user_query)
             
-        # Display a mock assistant answer for Day 1
+        # Retrieve relevant chunks and generate answer
+        retrieved_chunks = retrieve_context(user_query, chunks, top_k=3)
+        answer = generate_answer(user_query, retrieved_chunks)
+        
+        # Display assistant answer
         with st.chat_message("assistant"):
-            st.markdown(
-                f"**Mock Answer:**\n\n"
-                f"Thank you for asking: *\"{user_query}\"*\n\n"
-                "*(This is a mock response. Live embedding retrieval and LLM answer "
-                "generation will be integrated in upcoming development stages.)*"
-            )
+            st.markdown(answer)
+            
+            # Display retrieved sources and chunks in expandable section
+            if retrieved_chunks:
+                with st.expander("📚 View Retrieved Sources & Context Chunks"):
+                    for idx, chunk in enumerate(retrieved_chunks, start=1):
+                        st.markdown(f"**Chunk #{idx} — Source:** `{chunk.get('source')}` | **Chunk ID:** `{chunk.get('chunk_id')}`")
+                        st.code(chunk.get("text", ""), language="text")
 
 
 def main() -> None:
-    """Main execution workflow for the Streamlit application."""
+    """Main application execution pipeline."""
     setup_page_configuration()
-    render_sidebar()
-    render_main_content()
+    documents, chunks = load_and_process_documents()
+    render_sidebar(len(documents), len(chunks))
+    render_main_content(chunks)
 
 
 if __name__ == "__main__":
