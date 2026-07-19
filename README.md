@@ -8,7 +8,18 @@ A modern Python 3.13 demonstration application designed to showcase an enterpris
 
 The **Enterprise RAG Assistant** provides an interactive web workspace built with Streamlit. It demonstrates how organizations can ingest internal documents, break text into semantic chunks, generate vector embeddings, retrieve contextually relevant information, and leverage Large Language Models (LLMs) to answer queries with high accuracy.
 
-> **Note**: This repository represents the **Day 1 foundation setup**. It establishes project layout, modular pipeline packages, unit tests, and user interface scaffolding without requiring active cloud connections or external APIs.
+---
+
+## 🚀 Progress & Milestones
+
+- **Day 1: Project Foundation & Layout**
+  - Modular project structure (`app/` package, `rag/` submodules, `tests/`).
+  - Streamlit UI entry point and unit test suite setup.
+- **Day 2: Local RAG Pipeline Prototype**
+  - **Local Ingestion**: Scans and parses `.txt` and `.md` enterprise documents from `data/sample_docs/`.
+  - **Document Chunking**: Structured sliding-window text chunking with metadata tracking (`source`, `chunk_id`).
+  - **Normalized Keyword Retrieval**: Token-based keyword overlap matching with lowercasing and punctuation stripping.
+  - **Grounded Answer Generation**: Local response synthesis presenting retrieved context snippets and source citations.
 
 ---
 
@@ -35,12 +46,17 @@ enterprise-rag-assistant/
 │   └── rag/
 │       ├── __init__.py     # RAG pipeline package initializer
 │       ├── chunker.py      # Text chunking logic with overlap support
-│       ├── ingest.py       # Document ingestion placeholder
-│       ├── retrieve.py     # Context retrieval placeholder
-│       └── generate.py     # LLM response generation placeholder
+│       ├── ingest.py       # Local document ingestion module
+│       ├── retrieve.py     # Normalized keyword retrieval module
+│       └── generate.py     # Local grounded answer generation module
+├── data/
+│   └── sample_docs/        # Sample enterprise documents (security, HR, FAQ)
 ├── tests/
-│   └── test_chunker.py     # Unit tests for text chunker
+│   ├── test_chunker.py     # Unit tests for text chunker
+│   ├── test_ingest.py      # Unit tests for document ingestion
+│   └── test_retrieve.py    # Unit tests for keyword retrieval
 ├── .gitignore              # Ignored files (virtualenvs, secrets, caches)
+├── pytest.ini              # Pytest configuration
 ├── README.md               # Project documentation
 └── requirements.txt        # Project dependencies
 ```
