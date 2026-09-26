@@ -185,9 +185,9 @@ def generate_answer(query: str, context: list[dict]) -> str:
         return fallback_message
 
     response = (
-        "**Answer (Local Rule-Based Prototype)**:\n"
+        "**Answer**\n"
         f"{best_sentence}\n\n"
-        "**Source:**\n"
+        "**Source:** "
         f"{best_source}"
     )
 

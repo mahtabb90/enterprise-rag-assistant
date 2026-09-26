@@ -1,4 +1,4 @@
-"""
+﻿"""
 Unit tests for the local answer generation module.
 """
 
@@ -43,8 +43,8 @@ def test_generate_answer_annual_leave_query():
     assert "25 days" in answer
     assert "hr_policy.txt" in answer
     assert "remote work" not in answer.lower()
-    assert "Answer (Local Rule-Based Prototype)" in answer
-    assert "Source:" in answer
+    assert "**Answer**" in answer
+    assert "**Source:**" in answer
 
 
 def test_generate_answer_password_query():
@@ -59,7 +59,7 @@ def test_generate_answer_password_query():
     assert "password" in answer.lower()
     assert "12 characters" in answer
     assert "security_guidelines.txt" in answer
-    assert "Source:" in answer
+    assert "**Source:**" in answer
 
 
 def test_generate_answer_api_rate_limits_query():
@@ -73,7 +73,7 @@ def test_generate_answer_api_rate_limits_query():
 
     assert "1,000 requests per minute" in answer
     assert "product_faq.txt" in answer
-    assert "Source:" in answer
+    assert "**Source:**" in answer
 
 
 def test_extract_sentences_filters_headers():
@@ -99,4 +99,5 @@ def test_score_sentence_penalizes_remote_work_for_annual_leave():
     leave_score = _score_sentence(annual_leave_sent, query, rank=0)
 
     assert leave_score > remote_score
+
 
