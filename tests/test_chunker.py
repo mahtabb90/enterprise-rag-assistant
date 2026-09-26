@@ -71,3 +71,34 @@ def test_chunk_documents():
         assert chunk["text"] == chunk["text"].strip()
 
     assert chunks[0]["source"] == "doc1.txt"
+
+
+def test_chunk_text_prefers_sentence_boundary():
+    """Chunks should end at sentence boundaries (. ! ?) when available."""
+    text = (
+        "All user accounts must use strong passwords. "
+        "Passwords must be at least twelve characters long. "
+        "Multi-factor authentication is also required."
+    )
+    chunks = chunk_text(text, chunk_size=70, overlap=10)
+    assert len(chunks) >= 2
+    # Every chunk except possibly the last should end on sentence punctuation.
+    for chunk in chunks[:-1]:
+        assert chunk.endswith((".", "!", "?")), (
+            f"Expected chunk to end on sentence boundary, got: {repr(chunk[-30:])}"
+        )
+
+
+def test_chunk_text_no_mid_word_splits():
+    """No chunk should begin or end with a partial word when whitespace is available."""
+    text = (
+        "Security requires strong authentication and access controls. "
+        "Annual leave entitlement is twenty-five days per fiscal year. "
+        "API rate limits are enforced per authenticated client key."
+    )
+    chunks = chunk_text(text, chunk_size=80, overlap=15)
+    for chunk in chunks:
+        assert chunk == chunk.strip(), f"Chunk has leading/trailing whitespace: {repr(chunk)}"
+        assert chunk[0].isalnum() or chunk[0] in ('"', "'", "("), (
+            f"Chunk starts with unexpected character: {repr(chunk[:20])}"
+        )

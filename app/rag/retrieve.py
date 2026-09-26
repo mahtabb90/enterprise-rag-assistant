@@ -1,40 +1,61 @@
 """
 Retrieval Module.
 
-Provides two retrieval strategies:
+Provides three retrieval strategies in a cascading fallback chain:
 
-1. TF-IDF Vector Retrieval (primary)
+1. Vertex AI Semantic Retrieval (primary)
+   - prepare_vertex_index() -- INDEXING phase: embed document chunks once via Vertex AI.
+   - retrieve_vertex()      -- QUERY-TIME phase: embed query, rank by cosine similarity.
+
+2. TF-IDF Vector Retrieval (secondary / fallback)
    - prepare_tfidf_index()  -- INDEXING phase: fit vectorizer, transform corpus once.
    - retrieve_tfidf()       -- QUERY-TIME phase: transform query only, compute similarity.
 
-2. Keyword Retrieval (fallback)
-   - retrieve_context()     -- Normalized keyword overlap matching.
+3. Keyword Retrieval (tertiary / fallback)
+   - retrieve_context()     -- Normalised keyword overlap matching.
+
+Fallback chain
+--------------
+    Vertex semantic retrieval
+    |  if Vertex is unavailable or raises an exception
+    v
+    TF-IDF retrieval
+    |  if TF-IDF finds no result above its threshold
+    v
+    Keyword retrieval
+    |  if keyword retrieval finds no meaningful overlap
+    v
+    [] (empty list)
 
 RAG indexing / retrieval distinction
 -------------------------------------
-prepare_tfidf_index() mirrors the *document indexing* phase of a RAG pipeline:
-  build once, store for reuse.
-retrieve_tfidf() mirrors the *query-time retrieval* phase:
-  fast lookup against the pre-built index.
-In a production system this boundary maps to:
-  offline index building (embedding vectors into a vector database)
-  vs. online query serving (embed query -> nearest-neighbour search).
+Each retrieval path separates an INDEXING phase (build once, cache) from a
+QUERY-TIME phase (run for every user question):
+
+    Vertex:  prepare_vertex_index() --> retrieve_vertex()
+    TF-IDF:  prepare_tfidf_index()  --> retrieve_tfidf()
+
+In a production system this maps to:
+    offline embedding / index building
+    vs. online query serving (embed query -> nearest-neighbour search).
 
 Result schema
 -------------
-Both retrieval paths return a list of dicts with a consistent schema:
+All retrieval paths return a list of dicts with a consistent schema:
   {
       "source":           str   -- original filename,
       "chunk_id":         int   -- sequential chunk identifier,
       "text":             str   -- chunk text content,
-      "score":            float -- cosine similarity (TF-IDF) or 0 (keyword),
-      "retrieval_method": str   -- "tfidf" or "keyword",
+      "score":            float -- cosine similarity (Vertex/TF-IDF) or 0.0 (keyword),
+      "retrieval_method": str   -- "vertex", "tfidf", or "keyword",
   }
 """
 
+import logging
 import string
 from sklearn.metrics.pairwise import cosine_similarity
 from app.rag.vectorization import build_vectorizer, vectorize_corpus, vectorize_query
+from app.rag.embeddings import embed_documents, embed_query
 
 
 # ---------------------------------------------------------------------------
@@ -259,3 +280,125 @@ def retrieve_tfidf(
         return retrieve_context(query, chunks, top_k=top_k)
 
     return tfidf_results
+
+
+# ---------------------------------------------------------------------------
+# Vertex AI semantic indexing and retrieval
+# ---------------------------------------------------------------------------
+
+def prepare_vertex_index(chunks: list[dict], client) -> dict:
+    """Build and return a Vertex AI semantic index from document chunks.
+
+    INDEXING PHASE -- call this once at application startup and cache the
+    result.  Do not call this on every user query.
+
+    Steps:
+        1. Extract the text from every chunk to form the document corpus.
+        2. Call embed_documents() with task type RETRIEVAL_DOCUMENT to produce
+           one 768-dimensional dense vector per chunk.
+        3. Return the embeddings alongside the original chunk metadata.
+
+    The returned index is designed to be cached (e.g. with @st.cache_resource)
+    and passed into retrieve_vertex() for every subsequent query.  Embeddings
+    are NOT regenerated unless the underlying chunks change.
+
+    Args:
+        chunks: List of chunk dicts with source, chunk_id, and text fields.
+        client: A configured Vertex AI Gen AI client (from create_vertex_client()).
+
+    Returns:
+        dict: {
+            "embeddings": list[list[float]]  -- one 768-dim vector per chunk,
+            "chunks":     list[dict]          -- original chunk dicts (metadata preserved),
+        }
+    """
+    corpus = [chunk.get("text", "") for chunk in chunks]
+    embeddings = embed_documents(client, corpus)
+    return {
+        "embeddings": embeddings,
+        "chunks": chunks,
+    }
+
+
+def retrieve_vertex(
+    query: str,
+    index: dict,
+    client,
+    top_k: int = 3,
+    min_score: float = 0.5,
+) -> list[dict]:
+    """Retrieve the most relevant chunks using Vertex AI semantic similarity.
+
+    QUERY-TIME PHASE -- call this for every user question.  Only the query is
+    embedded here; the document embeddings are already in the index.
+
+    Steps:
+        1. Embed the query using embed_query() with task type RETRIEVAL_QUERY.
+        2. Compute cosine similarity between the query vector and every
+           pre-computed document embedding in the index.
+        3. Filter out chunks below the min_score threshold.
+        4. Sort by similarity descending and return the top_k results.
+
+    Semantic vs lexical retrieval
+    ------------------------------
+    Unlike TF-IDF, Vertex AI embeddings capture meaning regardless of exact
+    wording.  A query such as "How much vacation time do employees get?" can
+    retrieve a chunk containing "annual leave" even though the words differ,
+    because both phrases map to nearby points in the shared embedding space.
+
+    Threshold calibration
+    ---------------------
+    The default min_score of 0.5 is a provisional value.  It should be
+    calibrated from observed scores across clearly relevant, semantic, and
+    unrelated queries against your actual corpus.  Pass the configured value
+    from config.VERTEX_MIN_SCORE in the calling code.
+
+    Args:
+        query:     The user question or search string.
+        index:     The prepared Vertex index from prepare_vertex_index().
+        client:    A configured Vertex AI Gen AI client.
+        top_k:     Maximum number of results to return.  Defaults to 3.
+        min_score: Minimum cosine similarity to include a result (0.0 - 1.0).
+                   Defaults to 0.5 (provisional -- calibrate before production use).
+
+    Returns:
+        list[dict]: Ranked list of matching chunk dicts, each containing:
+            source, chunk_id, text, score (float), retrieval_method ("vertex").
+            Returns [] if no chunk exceeds the min_score threshold.
+
+    Raises:
+        Exception: Any exception from the Vertex AI embedding API is propagated
+            to the caller.  The calling code (e.g. main.py) is responsible for
+            catching API exceptions and falling back to TF-IDF retrieval.
+            Errors are NOT silently swallowed here so they remain visible
+            during local development.
+    """
+    embeddings = index.get("embeddings", [])
+    chunks = index.get("chunks", [])
+
+    if not embeddings or not chunks:
+        return []
+
+    # Step 1: embed only the query -- document embeddings are already cached.
+    query_vector = embed_query(client, query)
+
+    # Step 2: compute cosine similarity between the query and every chunk.
+    # cosine_similarity accepts list inputs; sklearn converts internally.
+    similarity_scores = cosine_similarity([query_vector], embeddings).flatten()
+
+    # Step 3: filter chunks below the relevance threshold.
+    scored_results = []
+    for idx, score in enumerate(similarity_scores):
+        if score >= min_score:
+            chunk = chunks[idx]
+            scored_results.append({
+                "source": chunk.get("source"),
+                "chunk_id": chunk.get("chunk_id"),
+                "text": chunk.get("text", ""),
+                "score": float(round(score, 4)),
+                "retrieval_method": "vertex",
+            })
+
+    # Step 4: sort by similarity score descending.
+    scored_results.sort(key=lambda r: r["score"], reverse=True)
+    return scored_results[:top_k]
